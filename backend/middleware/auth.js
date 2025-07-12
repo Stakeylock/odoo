@@ -1,29 +1,5 @@
-const { createClient } = require('@supabase/supabase-js');
-  
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-  
-  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
-    throw new Error('Missing Supabase environment variables');
-  }
-  
-  // Client for regular operations
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-  
-  // Admin client for operations requiring service role
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-  
-  module.exports = {
-    supabase,
-    supabaseAdmin
-  };
-  
-  // =============================================================================
-  // middleware/auth.js
-  // =============================================================================
-  const jwt = require('jsonwebtoken');
-  const { supabase } = require('../config/supabase');
+const jwt = require('jsonwebtoken');
+  const { supabase } = require('./supabase');
   
   // Middleware to authenticate JWT tokens
   const authenticateToken = async (req, res, next) => {
