@@ -59,5 +59,5 @@ Build a minimalistic Q&A platform supporting user roles, question and answer pos
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-team/stackit.git
-cd stackit
+git clone https://github.com/Stakeylock/odoo.git
+cd odoo
