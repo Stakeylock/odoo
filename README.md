@@ -19,12 +19,12 @@ community.
 
 ## 👨‍💻 Team Members – Odoo Hackathon 2025
 
-| Name                               | Role               |
-|------------------------------------|--------------------|
-| **Zayed Aman**                     | Backend Developer  |
-| **Ramaneni Srikrishnamurthy Naidu**| Frontend Developer |
-| **Jinitangsu Das**                 | Full Stack & DevOps|
-| **Ayush Ashtikar**                 | UI/UX & Testing    |
+| Name                               | Email             |Phone               |
+|------------------------------------|--------------------|--------------------|
+| **Zayed Aman**                     | amanzayed90@gmail.com  | 7731918300 |
+| **Ramaneni Srikrishnamurthy Naidu**| rskmn7734@gmail.com | 9848013559 |
+| **Jinitangsu Das**                 | bhairab.ok@gmail.com| 9059167563 |
+| **Ayush Ashtikar**                 | ayushastiker@gmail.com  | 9391168611 |
 
 ---
 
