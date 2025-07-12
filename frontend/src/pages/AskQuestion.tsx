@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,13 +36,24 @@ export const AskQuestion: React.FC = () => {
   }, [user, navigate]);
 
   const fetchTags = async () => {
-    const { data } = await supabase
-      .from('tags')
-      .select('*')
-      .order('name');
-    
-    if (data) {
-      setTags(data);
+    try {
+      const response = await fetch('http://localhost:3000/api/tags', {
+        headers: {
+          'Authorization': `Bearer ${user?.token}`
+        }
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setTags(data.data.tags);
+      } else {
+        throw new Error(data.message || 'Failed to fetch tags');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
     }
   };
 
@@ -72,31 +82,26 @@ export const AskQuestion: React.FC = () => {
     setLoading(true);
 
     try {
-      // Create the question
-      const { data: question, error: questionError } = await supabase
-        .from('questions')
-        .insert({
+      const response = await fetch('http://localhost:3000/api/questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user?.token}`
+        },
+        body: JSON.stringify({
           title: title.trim(),
-          description: description.trim(),
-          user_id: user.id
+          content: description.trim(),
+          tags: selectedTags.map(tagId => {
+            const tag = tags.find(t => t.id === tagId);
+            return tag ? tag.name : '';
+          }).filter(name => name !== '')
         })
-        .select()
-        .single();
+      });
 
-      if (questionError) throw questionError;
+      const data = await response.json();
 
-      // Add tags
-      if (selectedTags.length > 0) {
-        const tagInserts = selectedTags.map(tagId => ({
-          question_id: question.id,
-          tag_id: tagId
-        }));
-
-        const { error: tagError } = await supabase
-          .from('question_tags')
-          .insert(tagInserts);
-
-        if (tagError) throw tagError;
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to create question');
       }
 
       toast({
@@ -104,7 +109,7 @@ export const AskQuestion: React.FC = () => {
         description: "Your question has been posted."
       });
 
-      navigate(`/questions/${question.id}`);
+      navigate(`/questions/${data.data.question.id}`);
     } catch (error: any) {
       console.error('Error creating question:', error);
       toast({

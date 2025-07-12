@@ -42,7 +42,7 @@ router.post('/register', validate(schemas.register), async (req, res) => {
       .insert([{
         email,
         username,
-        password: hashedPassword,
+        password_hash: hashedPassword,
         role: 'user',
         is_active: true
       }])
@@ -85,7 +85,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
     // Find user
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, username, password, role, is_active')
+      .select('id, email, username, password_hash, role, is_active')
       .eq('email', email)
       .single();
 
@@ -97,7 +97,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
     }
 
     // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
