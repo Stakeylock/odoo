@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { supabase } = require('../config/supabase');
+const supabase = require('../config/supabase'); 
 const { validate, schemas } = require('../middleware/validation');
 const { authenticateToken } = require('../middleware/auth');
 
