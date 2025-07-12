@@ -1,40 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { questionsService, Question } from '@/services/questionsService';
+import { tagsService, Tag } from '@/services/tagsService';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, ThumbsUp, MessageSquare, User, Calendar } from 'lucide-react';
+import { Search, MessageSquare, User, Calendar } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-interface Question {
-  id: string;
-  title: string;
-  description: string;
-  created_at: string;
-  user_id: string;
-  users: {
-    username: string;
-    avatar_url?: string;
-  };
-  question_tags: {
-    tags: {
-      id: number;
-      name: string;
-    };
-  }[];
-  answers: {
-    id: string;
-  }[];
-  vote_count?: number;
-}
-
-interface Tag {
-  id: number;
-  name: string;
-}
 
 export const Home: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -50,60 +24,32 @@ export const Home: React.FC = () => {
   }, [searchParams]);
 
   const fetchTags = async () => {
-    const { data } = await supabase
-      .from('tags')
-      .select('*')
-      .order('name');
-    
-    if (data) {
+    try {
+      const data = await tagsService.getTags();
       setTags(data);
+    } catch (error) {
+      console.error('Error fetching tags:', error);
     }
   };
 
   const fetchQuestions = async () => {
     setLoading(true);
-    
-    let query = supabase
-      .from('questions')
-      .select(`
-        *,
-        users:user_id (username, avatar_url),
-        question_tags (
-          tags (id, name)
-        ),
-        answers (id)
-      `)
-      .order('created_at', { ascending: false });
-
-    // Apply search filter
-    const search = searchParams.get('search');
-    if (search) {
-      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
-    }
-
-    // Apply tag filter
-    const tag = searchParams.get('tag');
-    if (tag) {
-      const { data: taggedQuestions } = await supabase
-        .from('question_tags')
-        .select('question_id')
-        .eq('tag_id', parseInt(tag));
+    try {
+      const params: { search?: string; tag?: string } = {};
       
-      if (taggedQuestions) {
-        const questionIds = taggedQuestions.map(qt => qt.question_id);
-        query = query.in('id', questionIds);
-      }
-    }
+      const search = searchParams.get('search');
+      if (search) params.search = search;
+      
+      const tag = searchParams.get('tag');
+      if (tag) params.tag = tag;
 
-    const { data, error } = await query;
-    
-    if (error) {
-      console.error('Error fetching questions:', error);
-    } else if (data) {
+      const data = await questionsService.getQuestions(params);
       setQuestions(data);
+    } catch (error) {
+      console.error('Error fetching questions:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -197,7 +143,7 @@ export const Home: React.FC = () => {
                   <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <MessageSquare className="h-4 w-4" />
-                      <span>{question.answers.length}</span>
+                      <span>{question.answers?.length || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -206,7 +152,7 @@ export const Home: React.FC = () => {
               <CardContent>
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex flex-wrap gap-2">
-                    {question.question_tags.map(({ tags }) => (
+                    {question.question_tags?.map(({ tags }) => (
                       <Badge 
                         key={tags.id} 
                         variant="secondary"

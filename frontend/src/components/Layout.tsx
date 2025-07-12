@@ -43,9 +43,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   
                   <div className="flex items-center gap-2">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src={user.user_metadata?.avatar_url} />
+                      <AvatarImage src={user.avatar_url} />
                       <AvatarFallback>
-                        {user.email?.charAt(0).toUpperCase()}
+                        {user.username?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <Button variant="ghost" size="sm" onClick={handleSignOut}>

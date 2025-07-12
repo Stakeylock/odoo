@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { questionsService, Question } from '@/services/questionsService';
+import { answersService, Answer } from '@/services/answersService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,40 +18,6 @@ import {
   Check,
   MessageSquare 
 } from 'lucide-react';
-
-interface Question {
-  id: string;
-  title: string;
-  description: string;
-  created_at: string;
-  user_id: string;
-  users: {
-    username: string;
-    avatar_url?: string;
-  };
-  question_tags: {
-    tags: {
-      id: number;
-      name: string;
-    };
-  }[];
-}
-
-interface Answer {
-  id: string;
-  answer: string;
-  is_accepted: boolean;
-  created_at: string;
-  user_id: string;
-  users: {
-    username: string;
-    avatar_url?: string;
-  };
-  votes: {
-    vote_type: string;
-    user_id: string;
-  }[];
-}
 
 export const QuestionDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -73,45 +40,24 @@ export const QuestionDetail: React.FC = () => {
   const fetchQuestion = async () => {
     if (!id) return;
     
-    const { data, error } = await supabase
-      .from('questions')
-      .select(`
-        *,
-        users:user_id (username, avatar_url),
-        question_tags (
-          tags (id, name)
-        )
-      `)
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching question:', error);
-    } else if (data) {
+    try {
+      const data = await questionsService.getQuestion(id);
       setQuestion(data);
+    } catch (error) {
+      console.error('Error fetching question:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const fetchAnswers = async () => {
     if (!id) return;
     
-    const { data, error } = await supabase
-      .from('answers')
-      .select(`
-        *,
-        users:user_id (username, avatar_url),
-        votes (vote_type, user_id)
-      `)
-      .eq('question_id', id)
-      .order('is_accepted', { ascending: false })
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching answers:', error);
-    } else if (data) {
+    try {
+      const data = await answersService.getAnswers(id);
       setAnswers(data);
+    } catch (error) {
+      console.error('Error fetching answers:', error);
     }
   };
 
@@ -123,28 +69,7 @@ export const QuestionDetail: React.FC = () => {
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('answers')
-        .insert({
-          question_id: id,
-          user_id: user.id,
-          answer: newAnswer.trim()
-        });
-
-      if (error) throw error;
-
-      // Create notification for question owner
-      if (question && question.user_id !== user.id) {
-        await supabase
-          .from('notifications')
-          .insert({
-            user_id: question.user_id,
-            type: 'answer',
-            message: `${user.email} answered your question: ${question.title}`,
-            link: `/questions/${id}`
-          });
-      }
-
+      await answersService.createAnswer(id, { content: newAnswer.trim() });
       setNewAnswer('');
       fetchAnswers();
       
@@ -156,7 +81,7 @@ export const QuestionDetail: React.FC = () => {
       console.error('Error posting answer:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to post answer",
+        description: error.response?.data?.message || "Failed to post answer",
         variant: "destructive"
       });
     } finally {
@@ -175,39 +100,7 @@ export const QuestionDetail: React.FC = () => {
     }
 
     try {
-      // Check if user already voted
-      const { data: existingVote } = await supabase
-        .from('votes')
-        .select('*')
-        .eq('answer_id', answerId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingVote) {
-        if (existingVote.vote_type === voteType) {
-          // Remove vote if same type
-          await supabase
-            .from('votes')
-            .delete()
-            .eq('id', existingVote.id);
-        } else {
-          // Update vote type
-          await supabase
-            .from('votes')
-            .update({ vote_type: voteType })
-            .eq('id', existingVote.id);
-        }
-      } else {
-        // Create new vote
-        await supabase
-          .from('votes')
-          .insert({
-            answer_id: answerId,
-            user_id: user.id,
-            vote_type: voteType
-          });
-      }
-
+      await answersService.voteAnswer(answerId, voteType);
       fetchAnswers();
     } catch (error: any) {
       console.error('Error voting:', error);
@@ -223,18 +116,7 @@ export const QuestionDetail: React.FC = () => {
     if (!user || !question || question.user_id !== user.id) return;
 
     try {
-      // First, unaccept all answers for this question
-      await supabase
-        .from('answers')
-        .update({ is_accepted: false })
-        .eq('question_id', id);
-
-      // Then accept the selected answer
-      await supabase
-        .from('answers')
-        .update({ is_accepted: true })
-        .eq('id', answerId);
-
+      await answersService.acceptAnswer(answerId);
       fetchAnswers();
       
       toast({
@@ -295,7 +177,7 @@ export const QuestionDetail: React.FC = () => {
           />
           
           <div className="flex flex-wrap gap-2">
-            {question.question_tags.map(({ tags }) => (
+            {question.question_tags?.map(({ tags }) => (
               <Link 
                 key={tags.id}
                 to={`/?tag=${tags.id}`}

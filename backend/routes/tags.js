@@ -11,12 +11,12 @@ const express = require('express');
       let query = supabase
         .from('tags')
         .select(`
-          *,
-          question_tags (
-            question_id,
-            questions!inner (
+          id, name, // Explicitly selecting tag columns
+          question_tags ( // Join with question_tags
+            question_id, // Question_tags schema: question_id
+            questions!inner ( // Join with questions
               id,
-              is_deleted
+              is_deleted // Assuming 'is_deleted' exists for questions
             )
           )
         `);
@@ -42,7 +42,7 @@ const express = require('express');
         return {
           id: tag.id,
           name: tag.name,
-          description: tag.description,
+          // description: tag.description, // Removed as 'description' is not in your tags schema
           question_count: questionCount
         };
       });
@@ -68,12 +68,12 @@ const express = require('express');
       const { data: tags, error } = await supabase
         .from('tags')
         .select(`
-          *,
-          question_tags (
-            question_id,
-            questions!inner (
+          id, name, // Explicitly selecting tag columns
+          question_tags ( // Join with question_tags
+            question_id, // Question_tags schema: question_id
+            questions!inner ( // Join with questions
               id,
-              is_deleted
+              is_deleted // Assuming 'is_deleted' exists for questions
             )
           )
         `)
@@ -93,7 +93,7 @@ const express = require('express');
           return {
             id: tag.id,
             name: tag.name,
-            description: tag.description,
+            // description: tag.description, // Removed as 'description' is not in your tags schema
             question_count: questionCount
           };
         })

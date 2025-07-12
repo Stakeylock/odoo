@@ -61,6 +61,8 @@ router.post('/image', authenticateToken, upload.single('image'), async (req, res
 
     const result = await uploadPromise;
 
+    // This route does not interact directly with any of the provided database schemas
+    // It returns Cloudinary URL, which might be stored in a user's avatar_url or question/answer content
     res.json({
       success: true,
       message: 'Image uploaded successfully',

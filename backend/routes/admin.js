@@ -19,12 +19,12 @@ router.get('/stats', async (req, res) => {
     const { data: questions, error: questionsError } = await supabase
       .from('questions')
       .select('id', { count: 'exact' })
-      .eq('is_deleted', false);
+      .eq('is_deleted', false); // Assuming 'is_deleted' exists for questions
 
     const { data: answers, error: answersError } = await supabase
       .from('answers')
       .select('id', { count: 'exact' })
-      .eq('is_deleted', false);
+      .eq('is_deleted', false); // Assuming 'is_deleted' exists for answers
 
     const { data: tags, error: tagsError } = await supabase
       .from('tags')
@@ -66,7 +66,9 @@ router.delete('/questions/:id', async (req, res) => {
 
     // Delete related records first
     await supabase.from('question_tags').delete().eq('question_id', id);
+    // Votes table has 'question_id' for question votes, and 'answer_id' for answer votes
     await supabase.from('votes').delete().eq('question_id', id);
+    // Notifications table has 'related_id' and 'related_type'
     await supabase.from('notifications').delete().eq('related_id', id).eq('related_type', 'question');
     
     // Delete answers and their votes
@@ -144,6 +146,7 @@ router.get('/users', async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
+    // Matches 'users' schema: id, email, username, role, is_active, created_at
     const { data: users, error } = await supabase
       .from('users')
       .select('id, email, username, role, is_active, created_at')
@@ -179,6 +182,7 @@ router.put('/users/:id/deactivate', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Matches 'users' schema: is_active
     const { error } = await supabase
       .from('users')
       .update({ is_active: false })
@@ -206,6 +210,7 @@ router.put('/users/:id/activate', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Matches 'users' schema: is_active
     const { error } = await supabase
       .from('users')
       .update({ is_active: true })

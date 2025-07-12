@@ -21,15 +21,15 @@ const express = require('express');
       let query = supabase
         .from('questions')
         .select(`
-          *,
-          users:user_id (id, username),
-          question_tags!inner (
-            tags (id, name)
+          id, title, description, user_id, created_at, is_deleted, // Explicitly selecting question columns
+          users:user_id (id, username), // Assuming users table has id, username
+          question_tags!inner ( // Join with question_tags
+            tags (id, name) // Join with tags table
           ),
-          answers (id),
-          votes (id, type)
+          answers (id), // Select answer IDs for count
+          votes (id, vote_type, user_id) // Select vote IDs and type for count and user vote status
         `)
-        .eq('is_deleted', false);
+        .eq('is_deleted', false); // Assuming 'is_deleted' exists for questions
   
       // Apply filters
       if (tag) {
@@ -37,14 +37,16 @@ const express = require('express');
       }
   
       if (search) {
-        query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
+        // Assuming 'content' column exists for full-text search, if not, remove or adjust
+        query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`); // Changed 'content' to 'description'
       }
   
       // Apply sorting
       switch (sort) {
         case 'popular':
           // This would need a computed column or separate query for vote counts
-          query = query.order('created_at', { ascending: false });
+          // For now, sorting by created_at as popular requires complex join/aggregation
+          query = query.order('created_at', { ascending: false }); 
           break;
         case 'oldest':
           query = query.order('created_at', { ascending: true });
@@ -64,10 +66,10 @@ const express = require('express');
   
       // Process the data to include vote counts and user vote status
       const processedQuestions = questions.map(question => {
-        const upvotes = question.votes.filter(v => v.type === 'upvote').length;
-        const downvotes = question.votes.filter(v => v.type === 'downvote').length;
+        const upvotes = question.votes.filter(v => v.vote_type === 'upvote').length; // Changed 'type' to 'vote_type'
+        const downvotes = question.votes.filter(v => v.vote_type === 'downvote').length; // Changed 'type' to 'vote_type'
         const userVote = req.user ? 
-          question.votes.find(v => v.user_id === req.user.id)?.type : null;
+          question.votes.find(v => v.user_id === req.user.id)?.vote_type : null; // Changed 'type' to 'vote_type'
   
         return {
           ...question,
@@ -79,7 +81,8 @@ const express = require('express');
           votes: undefined,
           users: undefined,
           question_tags: undefined,
-          answers: undefined
+          answers: undefined,
+          is_deleted: undefined // Assuming is_deleted is not needed in final output
         };
       });
   
@@ -111,20 +114,20 @@ const express = require('express');
       const { data: question, error } = await supabase
         .from('questions')
         .select(`
-          *,
-          users:user_id (id, username),
-          question_tags (
-            tags (id, name)
+          id, title, description, user_id, created_at, is_deleted, // Explicitly selecting question columns
+          users:user_id (id, username), // Users schema: id, username
+          question_tags ( // Join with question_tags
+            tags (id, name) // Tags schema: id, name
           ),
-          answers (
-            *,
-            users:user_id (id, username),
-            votes (id, type, user_id)
+          answers ( // Answers schema: id, question_id, user_id, answer, is_accepted, created_at, is_deleted (assuming is_deleted exists)
+            id, question_id, user_id, answer, is_accepted, created_at, is_deleted,
+            users:user_id (id, username), // Users schema: id, username
+            votes (id, vote_type, user_id) // Votes schema: id, user_id, answer_id, vote_type
           ),
-          votes (id, type, user_id)
+          votes (id, vote_type, user_id) // Votes schema: id, user_id, question_id, vote_type (assuming question_id also exists for question votes)
         `)
         .eq('id', id)
-        .eq('is_deleted', false)
+        .eq('is_deleted', false) // Assuming 'is_deleted' exists for questions
         .single();
   
       if (error || !question) {
@@ -135,28 +138,29 @@ const express = require('express');
       }
   
       // Process votes for question
-      const questionUpvotes = question.votes.filter(v => v.type === 'upvote').length;
-      const questionDownvotes = question.votes.filter(v => v.type === 'downvote').length;
+      const questionUpvotes = question.votes.filter(v => v.vote_type === 'upvote').length; // Changed 'type' to 'vote_type'
+      const questionDownvotes = question.votes.filter(v => v.vote_type === 'downvote').length; // Changed 'type' to 'vote_type'
       const userQuestionVote = req.user ? 
-        question.votes.find(v => v.user_id === req.user.id)?.type : null;
+        question.votes.find(v => v.user_id === req.user.id)?.vote_type : null; // Changed 'type' to 'vote_type'
   
       // Process answers with votes
       const processedAnswers = question.answers
-        .filter(answer => !answer.is_deleted)
+        .filter(answer => !answer.is_deleted) // Filter out soft-deleted answers
         .map(answer => {
-          const upvotes = answer.votes.filter(v => v.type === 'upvote').length;
-          const downvotes = answer.votes.filter(v => v.type === 'downvote').length;
+          const upvotes = answer.votes.filter(v => v.vote_type === 'upvote').length; // Changed 'type' to 'vote_type'
+          const downvotes = answer.votes.filter(v => v.vote_type === 'downvote').length; // Changed 'type' to 'vote_type'
           const userVote = req.user ? 
-            answer.votes.find(v => v.user_id === req.user.id)?.type : null;
+            answer.votes.find(v => v.user_id === req.user.id)?.vote_type : null; // Changed 'type' to 'vote_type'
   
           return {
             ...answer,
             author: answer.users,
             vote_count: upvotes - downvotes,
             user_vote: userVote,
-            can_accept: req.user && req.user.id === question.user_id,
+            can_accept: req.user && req.user.id === question.user_id, // Assuming req.user.id is available
             votes: undefined,
-            users: undefined
+            users: undefined,
+            is_deleted: undefined // Assuming is_deleted is not needed in final output
           };
         })
         .sort((a, b) => {
@@ -173,10 +177,11 @@ const express = require('express');
         answers: processedAnswers,
         vote_count: questionUpvotes - questionDownvotes,
         user_vote: userQuestionVote,
-        can_edit: req.user && req.user.id === question.user_id,
+        can_edit: req.user && req.user.id === question.user_id, // Assuming req.user.id is available
         votes: undefined,
         users: undefined,
-        question_tags: undefined
+        question_tags: undefined,
+        is_deleted: undefined // Assuming is_deleted is not needed in final output
       };
   
       res.json({
@@ -195,17 +200,18 @@ const express = require('express');
   // Create new question
   router.post('/', authenticateToken, validate(schemas.question), async (req, res) => {
     try {
-      const { title, content, tags } = req.body;
-  
+      const { title, content, tags } = req.body; // 'content' maps to 'description'
+
       // Create question
+      // Questions schema: title, description, user_id, created_at
       const { data: question, error: questionError } = await supabase
         .from('questions')
         .insert([{
           title,
-          content,
+          description: content, // Mapped 'content' to 'description'
           user_id: req.user.id
         }])
-        .select()
+        .select('id, title, description, user_id, created_at') // Explicitly select columns
         .single();
   
       if (questionError) {
@@ -215,6 +221,7 @@ const express = require('express');
       // Handle tags
       for (const tagName of tags) {
         // Get or create tag
+        // Tags schema: id, name
         let { data: tag, error: tagError } = await supabase
           .from('tags')
           .select('id')
@@ -223,6 +230,7 @@ const express = require('express');
   
         if (tagError || !tag) {
           // Create new tag
+          // Tags schema: name
           const { data: newTag, error: createTagError } = await supabase
             .from('tags')
             .insert([{ name: tagName }])
@@ -236,6 +244,7 @@ const express = require('express');
         }
   
         // Link tag to question
+        // Question_tags schema: question_id, tag_id
         const { error: linkError } = await supabase
           .from('question_tags')
           .insert([{
@@ -266,9 +275,10 @@ const express = require('express');
   router.put('/:id', authenticateToken, validate(schemas.question), async (req, res) => {
     try {
       const { id } = req.params;
-      const { title, content, tags } = req.body;
+      const { title, content, tags } = req.body; // 'content' maps to 'description'
   
       // Check if user owns the question
+      // Questions schema: user_id
       const { data: question, error: checkError } = await supabase
         .from('questions')
         .select('user_id')
@@ -283,11 +293,12 @@ const express = require('express');
       }
   
       // Update question
+      // Questions schema: title, description, updated_at (assuming updated_at exists)
       const { data: updatedQuestion, error: updateError } = await supabase
         .from('questions')
-        .update({ title, content, updated_at: new Date() })
+        .update({ title, description: content, updated_at: new Date() }) // Mapped 'content' to 'description'
         .eq('id', id)
-        .select()
+        .select('id, title, description, user_id, created_at') // Explicitly select columns
         .single();
   
       if (updateError) {
@@ -295,6 +306,7 @@ const express = require('express');
       }
   
       // Update tags - remove old ones and add new ones
+      // Question_tags schema: question_id
       await supabase
         .from('question_tags')
         .delete()
@@ -302,6 +314,7 @@ const express = require('express');
   
       // Add new tags
       for (const tagName of tags) {
+        // Tags schema: id, name
         let { data: tag, error: tagError } = await supabase
           .from('tags')
           .select('id')
@@ -309,6 +322,7 @@ const express = require('express');
           .single();
   
         if (tagError || !tag) {
+          // Tags schema: name
           const { data: newTag, error: createTagError } = await supabase
             .from('tags')
             .insert([{ name: tagName }])
@@ -321,6 +335,7 @@ const express = require('express');
           tag = newTag;
         }
   
+        // Question_tags schema: question_id, tag_id
         await supabase
           .from('question_tags')
           .insert([{
@@ -349,6 +364,7 @@ const express = require('express');
       const { id } = req.params;
   
       // Check if user owns the question or is admin
+      // Questions schema: user_id
       const { data: question, error: checkError } = await supabase
         .from('questions')
         .select('user_id')
@@ -370,6 +386,7 @@ const express = require('express');
       }
   
       // Soft delete
+      // Questions schema: is_deleted (assuming it exists), updated_at (assuming it exists)
       const { error } = await supabase
         .from('questions')
         .update({ is_deleted: true, updated_at: new Date() })
@@ -396,9 +413,10 @@ const express = require('express');
   router.post('/:id/vote', authenticateToken, validate(schemas.vote), async (req, res) => {
     try {
       const { id } = req.params;
-      const { type } = req.body;
+      const { type } = req.body; // 'type' maps to 'vote_type'
   
       // Check if question exists
+      // Questions schema: id
       const { data: question, error: questionError } = await supabase
         .from('questions')
         .select('id')
@@ -413,15 +431,16 @@ const express = require('express');
       }
   
       // Check existing vote
+      // Votes schema: id, vote_type, question_id, user_id
       const { data: existingVote, error: voteError } = await supabase
         .from('votes')
-        .select('id, type')
+        .select('id, vote_type') // Changed 'type' to 'vote_type'
         .eq('question_id', id)
         .eq('user_id', req.user.id)
         .single();
   
       if (existingVote) {
-        if (existingVote.type === type) {
+        if (existingVote.vote_type === type) { // Changed 'type' to 'vote_type'
           // Remove vote if same type
           await supabase
             .from('votes')
@@ -434,9 +453,10 @@ const express = require('express');
           });
         } else {
           // Update vote type
+          // Votes schema: vote_type
           await supabase
             .from('votes')
-            .update({ type })
+            .update({ vote_type: type }) // Changed 'type' to 'vote_type'
             .eq('id', existingVote.id);
   
           return res.json({
@@ -447,12 +467,13 @@ const express = require('express');
       }
   
       // Create new vote
+      // Votes schema: question_id, user_id, vote_type
       const { error: createError } = await supabase
         .from('votes')
         .insert([{
           question_id: id,
           user_id: req.user.id,
-          type
+          vote_type: type // Changed 'type' to 'vote_type'
         }]);
   
       if (createError) {

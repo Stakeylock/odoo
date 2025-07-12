@@ -3,21 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { notificationsService, Notification } from '@/services/notificationsService';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-interface Notification {
-  id: string;
-  message: string;
-  link: string | null;
-  is_read: boolean;
-  created_at: string;
-}
 
 export const NotificationBell: React.FC = () => {
   const { user } = useAuth();
@@ -28,16 +20,12 @@ export const NotificationBell: React.FC = () => {
     if (!user) return;
 
     const fetchNotifications = async () => {
-      const { data } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (data) {
+      try {
+        const data = await notificationsService.getNotifications(user.id);
         setNotifications(data);
         setUnreadCount(data.filter(n => !n.is_read).length);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
       }
     };
 
@@ -45,15 +33,15 @@ export const NotificationBell: React.FC = () => {
   }, [user]);
 
   const markAsRead = async (id: string) => {
-    await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', id);
-    
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, is_read: true } : n)
-    );
-    setUnreadCount(prev => Math.max(0, prev - 1));
+    try {
+      await notificationsService.markAsRead(id);
+      setNotifications(prev => 
+        prev.map(n => n.id === id ? { ...n, is_read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
   if (!user) return null;

@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { questionsService } from '@/services/questionsService';
+import { tagsService, Tag } from '@/services/tagsService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,11 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { RichTextEditor } from '@/components/RichTextEditor';
-
-interface Tag {
-  id: number;
-  name: string;
-}
 
 export const AskQuestion: React.FC = () => {
   const { user } = useAuth();
@@ -23,7 +20,7 @@ export const AskQuestion: React.FC = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
-  const [selectedTags, setSelectedTags] = useState<number[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -37,31 +34,18 @@ export const AskQuestion: React.FC = () => {
 
   const fetchTags = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/tags', {
-        headers: {
-          'Authorization': `Bearer ${user?.token}`
-        }
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setTags(data.data.tags);
-      } else {
-        throw new Error(data.message || 'Failed to fetch tags');
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      const data = await tagsService.getTags();
+      setTags(data);
+    } catch (error) {
+      console.error('Error fetching tags:', error);
     }
   };
 
-  const handleTagToggle = (tagId: number) => {
+  const handleTagToggle = (tagName: string) => {
     setSelectedTags(prev => 
-      prev.includes(tagId) 
-        ? prev.filter(id => id !== tagId)
-        : [...prev, tagId]
+      prev.includes(tagName) 
+        ? prev.filter(name => name !== tagName)
+        : [...prev, tagName]
     );
   };
 
@@ -82,39 +66,23 @@ export const AskQuestion: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/questions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.token}`
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          content: description.trim(),
-          tags: selectedTags.map(tagId => {
-            const tag = tags.find(t => t.id === tagId);
-            return tag ? tag.name : '';
-          }).filter(name => name !== '')
-        })
+      const question = await questionsService.createQuestion({
+        title: title.trim(),
+        description: description.trim(),
+        tags: selectedTags
       });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to create question');
-      }
 
       toast({
         title: "Success!",
         description: "Your question has been posted."
       });
 
-      navigate(`/questions/${data.data.question.id}`);
+      navigate(`/questions/${question.id}`);
     } catch (error: any) {
       console.error('Error creating question:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create question",
+        description: error.response?.data?.message || "Failed to create question",
         variant: "destructive"
       });
     } finally {
@@ -164,9 +132,9 @@ export const AskQuestion: React.FC = () => {
                   <div key={tag.id} className="flex items-center space-x-2">
                     <Checkbox
                       id={`tag-${tag.id}`}
-                      checked={selectedTags.includes(tag.id)}
-                      onCheckedChange={() => handleTagToggle(tag.id)}
-                      disabled={!selectedTags.includes(tag.id) && selectedTags.length >= 5}
+                      checked={selectedTags.includes(tag.name)}
+                      onCheckedChange={() => handleTagToggle(tag.name)}
+                      disabled={!selectedTags.includes(tag.name) && selectedTags.length >= 5}
                     />
                     <Label 
                       htmlFor={`tag-${tag.id}`}

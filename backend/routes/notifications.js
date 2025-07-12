@@ -10,9 +10,10 @@ router.get('/', authenticateToken, async (req, res) => {
     const { page = 1, limit = 20, unread_only = false } = req.query;
     const offset = (page - 1) * limit;
 
+    // Notifications schema: id, user_id, type, message, link, is_read, created_at
     let query = supabase
       .from('notifications')
-      .select('*')
+      .select('id, user_id, type, message, link, is_read, created_at') // Explicitly selecting columns
       .eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -28,6 +29,7 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 
     // Get unread count
+    // Notifications schema: id, user_id, is_read
     const { data: unreadCount, error: unreadError } = await supabase
       .from('notifications')
       .select('id', { count: 'exact' })
@@ -60,6 +62,7 @@ router.put('/:id/read', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Notifications schema: is_read
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
@@ -86,6 +89,7 @@ router.put('/:id/read', authenticateToken, async (req, res) => {
 // Mark all notifications as read
 router.put('/read-all', authenticateToken, async (req, res) => {
   try {
+    // Notifications schema: is_read
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
