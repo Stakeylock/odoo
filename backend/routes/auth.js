@@ -1,35 +1,36 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { body, validationResult } = require('express-validator');
-const { supabase } = require('../config/database');
+const { supabase } = require('../config/supabase');
+const { validate, schemas } = require('../middleware/validation');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Register
-router.post('/register', [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 6 }),
-  body('username').isLength({ min: 3 }).isAlphanumeric(),
-  body('full_name').isLength({ min: 2 })
-], async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+// Generate JWT token
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE
+  });
+};
 
-    const { email, password, username, full_name } = req.body;
+// Register
+router.post('/register', validate(schemas.register), async (req, res) => {
+  try {
+    const { email, password, username } = req.body;
 
     // Check if user exists
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')
-      .or(`email.eq.${email},username.eq.${username}`);
+      .or(`email.eq.${email},username.eq.${username}`)
+      .single();
 
-    if (existingUser && existingUser.length > 0) {
-      return res.status(409).json({ error: 'User already exists' });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email or username already exists'
+      });
     }
 
     // Hash password
@@ -38,106 +39,128 @@ router.post('/register', [
     // Create user
     const { data: user, error } = await supabase
       .from('users')
-      .insert({
+      .insert([{
         email,
-        password: hashedPassword,
         username,
-        full_name,
-        role: 'user'
-      })
-      .select('id, email, username, full_name, role, created_at')
+        password: hashedPassword,
+        role: 'user',
+        is_active: true
+      }])
+      .select('id, email, username, role')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    // Generate JWT
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE }
-    );
+    const token = generateToken(user.id);
 
     res.status(201).json({
+      success: true,
       message: 'User registered successfully',
-      token,
-      user
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: user.role
+        },
+        token
+      }
     });
   } catch (error) {
-    next(error);
+    console.error('Registration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Registration failed'
+    });
   }
 });
 
 // Login
-router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
-  body('password').exists()
-], async (req, res, next) => {
+router.post('/login', validate(schemas.login), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { email, password } = req.body;
 
-    // Get user
+    // Find user
     const { data: user, error } = await supabase
       .from('users')
-      .select('*')
+      .select('id, email, username, password, role, is_active')
       .eq('email', email)
       .single();
 
-    if (error || !user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    if (error || !user || !user.is_active) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
     // Check password
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
-    // Update last login
-    await supabase
-      .from('users')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', user.id);
-
-    // Generate JWT
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE }
-    );
-
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    const token = generateToken(user.id);
 
     res.json({
+      success: true,
       message: 'Login successful',
-      token,
-      user: userWithoutPassword
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: user.role
+        },
+        token
+      }
     });
   } catch (error) {
-    next(error);
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Login failed'
+    });
   }
 });
 
 // Get current user
-router.get('/me', authenticateToken, (req, res) => {
-  const { password, ...userWithoutPassword } = req.user;
-  res.json({ user: userWithoutPassword });
+router.get('/me', authenticateToken, async (req, res) => {
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, username, role, created_at')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      data: { user }
+    });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user information'
+    });
+  }
 });
 
-// Refresh token
-router.post('/refresh', authenticateToken, (req, res) => {
-  const token = jwt.sign(
-    { userId: req.user.id, role: req.user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE }
-  );
-
-  res.json({ token });
+// Logout (client-side token removal)
+router.post('/logout', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Logout successful'
+  });
 });
 
 module.exports = router;
