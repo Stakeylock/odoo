@@ -3,9 +3,18 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const supabase = require('../config/supabase');
+// CORRECTED: Use object destructuring to get the supabase client
+const { supabase } = require('../config/supabase');
 const { validate, schemas } = require('../middleware/validation');
 const { authenticateToken } = require('../middleware/auth');
+
+// CRITICAL DEBUGGING CHECK: Ensure Supabase client is properly initialized
+if (!supabase || typeof supabase.from !== 'function') {
+    console.error('CRITICAL ERROR: Supabase client is not properly initialized or exported in ../config/supabase.js.');
+    console.error('Please verify the contents of ../config/supabase.js and ensure your .env file has correct SUPABASE_URL and SUPABASE_ANON_KEY values.');
+    // You might want to throw an error here to prevent the server from starting with a broken dependency:
+    // throw new Error('Supabase client is unavailable. Check configuration.');
+}
 
 const router = express.Router();
 
@@ -70,22 +79,19 @@ router.post('/register', validate(schemas.register), async (req, res, next) => {
             .insert([{
                 email,
                 username,
-                // Changed 'password' to 'password_hash' to match your Supabase schema
                 password_hash: hashedPassword,
                 role: 'user',
                 is_active: true
             }])
             .select('id, email, username, role')
-            .single(); // Using .single() here means it expects exactly one row back
+            .single();
 
         if (insertError) {
             console.error('Supabase error during user insertion:', insertError.message);
-            // If there's an error during insertion, throw it to be caught by the main catch block
             throw new Error(`Database error during user creation: ${insertError.message}`);
         }
 
         if (!user) {
-            // This case might happen if .single() returns null but no explicit error
             console.error('Supabase user insertion returned no data despite no explicit error.');
             throw new Error('User creation failed: No user data returned.');
         }
@@ -115,17 +121,8 @@ router.post('/register', validate(schemas.register), async (req, res, next) => {
         console.error('--- General Registration Error Caught ---');
         console.error('Error type:', error.name);
         console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack); // Full stack trace for detailed debugging
-
-        // Pass the error to the next middleware (errorHandler)
-        // This ensures your global error handler can process it
+        console.error('Error stack:', error.stack);
         next(error);
-
-        // Or, if you want to handle it directly here and not pass to next()
-        // res.status(500).json({
-        //     success: false,
-        //     message: 'Registration failed: An unexpected error occurred.'
-        // });
     } finally {
         console.log('--- Register Endpoint Finished ---');
     }
@@ -143,7 +140,6 @@ router.post('/login', validate(schemas.login), async (req, res, next) => {
         console.log('Finding user by email...');
         const { data: user, error: findUserError } = await supabase
             .from('users')
-            // Changed 'password' to 'password_hash' in select statement
             .select('id, email, username, password_hash, role, is_active')
             .eq('email', email)
             .single();
@@ -163,7 +159,6 @@ router.post('/login', validate(schemas.login), async (req, res, next) => {
         console.log('User found. Checking password...');
 
         // Check password
-        // Changed 'user.password' to 'user.password_hash' for comparison
         const isPasswordValid = await bcrypt.compare(password, user.password_hash);
         if (!isPasswordValid) {
             console.warn(`Login failed: Invalid password for email: ${email}`);

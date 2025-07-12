@@ -9,9 +9,11 @@
     "migrate": "node scripts/migrate.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.38.0",
+    "@supabase/supabase-js": "^2.50.5",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.41.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
     "express-rate-limit": "^6.10.0",
     "helmet": "^7.0.0",
     "joi": "^17.9.2",
