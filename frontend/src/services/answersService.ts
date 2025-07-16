@@ -7,36 +7,40 @@ export interface Answer {
   is_accepted: boolean;
   created_at: string;
   user_id: string;
-  users: {
+  author: {
+    id: string;
     username: string;
-    avatar_url?: string;
   };
-  votes: {
-    vote_type: string;
-    user_id: string;
-  }[];
+  vote_count: number;
+  user_vote?: 'upvote' | 'downvote' | null;
+  can_accept?: boolean;
 }
 
 export interface CreateAnswerData {
-  content: string;
+  content: string; // Maps to 'answer' in backend
+  question_id: string;
 }
 
 export const answersService = {
-  async getAnswers(questionId: string): Promise<Answer[]> {
-    const response = await api.get(`/answers/${questionId}`);
-    return response.data;
+  async createAnswer(data: CreateAnswerData): Promise<Answer> {
+    const response = await api.post('/answers', data);
+    return response.data.answer;
   },
 
-  async createAnswer(questionId: string, data: CreateAnswerData): Promise<Answer> {
-    const response = await api.post(`/answers/${questionId}`, data);
-    return response.data;
+  async updateAnswer(id: string, data: { content: string }): Promise<Answer> {
+    const response = await api.put(`/answers/${id}`, data);
+    return response.data.answer;
   },
 
-  async acceptAnswer(answerId: string): Promise<void> {
-    await api.patch(`/answers/${answerId}/accept`);
+  async deleteAnswer(id: string): Promise<void> {
+    await api.delete(`/answers/${id}`);
   },
 
-  async voteAnswer(answerId: string, voteType: 'upvote' | 'downvote'): Promise<void> {
-    await api.post(`/answers/${answerId}/vote`, { voteType });
+  async voteAnswer(id: string, voteType: 'upvote' | 'downvote'): Promise<void> {
+    await api.post(`/answers/${id}/vote`, { type: voteType });
+  },
+
+  async acceptAnswer(id: string): Promise<void> {
+    await api.post(`/answers/${id}/accept`);
   }
 };
